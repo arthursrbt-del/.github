@@ -8,7 +8,19 @@ output:
     toc: true
     toc_float: true
 ---
-
+<style>
+/* Força o relatório a ter uma largura máxima centralizada (Estética Vertical) */
+.main-container {
+  max-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
+}
+/* Centraliza todos os gráficos automaticamente */
+img, .ggplot2 {
+  display: block;
+  margin: 0 auto;
+}
+</style>
 ```{r setup, include=FALSE}
 # Configuração global para o relatório ficar limpo, sem mostrar os "warnings"
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
@@ -20,7 +32,7 @@ Este relatório tem como objetivo analisar o comportamento de músicas no Spotif
 
 A análise busca identificar padrões, mudanças de comportamento do público e possíveis impactos de eventos globais (como a pandemia da COVID-19) no consumo de música digital.
 
-------------------------------------------------------------------------
+
 
 # Objetivo da Análise
 
@@ -32,7 +44,7 @@ O código desenvolvido em R tem como principais objetivos:
 - Identificar os artistas mais recorrentes no ranking Top 200 do Spotify no Brasil;
 - Avaliar a evolução do conteúdo explícito, a sazonalidade das reproduções e as características das músicas mais populares.
 
---------------------------------
+
 ##Carregamento dos pacotes
 
 ```{r include=FALSE}
@@ -41,7 +53,7 @@ library(lubridate)
 library(tidytext)
 library(scales)
 ```
---------------------------------
+
 # Fonte e Estrutura dos Dados
 
 Os dados são provenientes de um arquivo CSV localizado no caminho:
@@ -104,7 +116,6 @@ dados_aux <- dados_br |>
   )
 ```
 
-#######################################################################################################################################################
 
 ### Interpretação do gráfico 1: Evolução dos Streams ao Longo do Tempo
 
@@ -132,7 +143,7 @@ dados_br |>
 
 ```
 
-#######################################################################################################################################################
+
 
 ### Interpretação do gráfico 2: Distribuição de Streams (Escala Logarítmica)
 
@@ -161,7 +172,6 @@ dados_br |>
 
 ```
 
-#######################################################################################################################################################
 
 ### Interpretação do Gráfico 3: Média de Streams Diários
 
@@ -193,7 +203,7 @@ dados_br |>
 
 ```
 
-#######################################################################################################################################################
+
 
 ### Interpretação do Gráfico 4: Top Artistas por Período
 
@@ -201,7 +211,7 @@ Este gráfico mostra os artistas mais recorrentes no ranking Top 200, divididos 
 
 **Relação observada:** Identifica os artistas dominantes em cada fase e permite observar se houve renovação do mercado musical nacional ou a permanência de nomes já consolidados.
 
-```{r grafico4, fig.width=12, fig.height=8}
+```{r grafico4, fig.width=10, fig.height=10}
 dados_br |>
   count(artists, periodo) |>
   group_by(periodo) |>
@@ -228,7 +238,7 @@ dados_br |>
 
 ```
 
-#######################################################################################################################################################
+
 
 ### Interpretação do Gráfico 5: Evolução do Conteúdo Explícito
 
@@ -236,7 +246,7 @@ Este gráfico acompanha, ano a ano, o volume total de streams gerado por música
 
 **Relação observada:** Permite observar se a participação de músicas explícitas cresceu, diminuiu ou se manteve estável ao longo dos anos, revelando mudanças no perfil de consumo e na produção musical brasileira.
 
-```{r grafico5, fig.width=9, fig.height=5}
+```{r grafico5, fig.width=8, fig.height=5}
 dados_g_explicito <- dados_aux |>
   group_by(ano, explicit) |>
   summarise(
@@ -278,7 +288,6 @@ ggplot(dados_g_explicito,
 
 O gráfico evidencia a evolução do consumo de músicas explícitas e livres ao longo dos anos. Observa-se uma participação crescente das músicas classificadas como explícitas, refletindo mudanças no perfil de consumo dos usuários brasileiros e na produção musical contemporânea.
 
-#######################################################################################################################################################
 
 ### Interpretação do Gráfico 6: Sazonalidade dos Streams
 
@@ -286,7 +295,7 @@ Este mapa de calor cruza mês e ano para mostrar em que momentos do calendário 
 
 **Relação observada:** Identifica os períodos de maior audiência durante cada ano. Os tons mais claros/quentes indicam maior concentração de reproduções, revelando possíveis padrões sazonais relacionados a férias, festividades e lançamentos de novos sucessos.
 
-```{r grafico6, fig.width=9, fig.height=5}
+```{r grafico6, fig.width=8, fig.height=5}
 dados_g_sazonal <- dados_aux |>
   group_by(ano, mes) |>
   summarise(
@@ -316,7 +325,7 @@ ggplot(
   theme(legend.position = "right")
 ```
 
-#######################################################################################################################################################
+
 
 ### Interpretação do Gráfico 7: Top 10 Músicas Mais Tocadas
 
@@ -324,7 +333,7 @@ Este gráfico apresenta as dez músicas com maior volume acumulado de reproduç�
 
 **Relação observada:** Permite identificar quais faixas concentram o maior volume de audiência e observar se as músicas mais ouvidas tendem a ser mais longas/curtas e explícitas/livres.
 
-```{r grafico7, fig.width=9, fig.height=6}
+```{r grafico7, fig.width=8, fig.height=6}
 dados_g_top10 <- dados_aux |>
   group_by(name, artists, explicit) |>
   summarise(
