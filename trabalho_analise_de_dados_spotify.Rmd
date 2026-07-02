@@ -1,0 +1,377 @@
+---
+title: "Analise do data set do spotify das musicas no brasil"
+author: "Thiago Felipi-7462, João Vitor-6157, Arthur Roberto-5054"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+# Configuração global para o relatório ficar limpo, sem mostrar os "warnings"
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## 1. Introdução
+
+Este relatório tem como objetivo analisar o comportamento de músicas no Spotify, utilizando dados de ranking e número de reproduções (streams). A proposta central é compreender como a popularidade musical evolui ao longo do tempo, especialmente considerando três períodos distintos: pré-pandemia, pandemia e pós-pandemia.
+
+A análise busca identificar padrões, mudanças de comportamento do público e possíveis impactos de eventos globais (como a pandemia da COVID-19) no consumo de música digital.
+
+------------------------------------------------------------------------
+
+# Objetivo da Análise
+
+O código desenvolvido em R tem como principais objetivos:
+
+- Analisar a evolução dos streams ao longo do tempo;
+- Comparar o comportamento dos dados entre diferentes períodos históricos;
+- Observar a distribuição dos streams;
+- Identificar os artistas mais recorrentes no ranking Top 200 do Spotify no Brasil;
+- Avaliar a evolução do conteúdo explícito, a sazonalidade das reproduções e as características das músicas mais populares.
+
+--------------------------------
+##Carregamento dos pacotes
+
+```{r include=FALSE}
+library(tidyverse)
+library(lubridate)
+library(tidytext)
+library(scales)
+```
+--------------------------------
+# Fonte e Estrutura dos Dados
+
+Os dados são provenientes de um arquivo CSV localizado no caminho:
+
+```{r}
+caminho_dados <- "charts.csv"
+
+dados <- read_csv(caminho_dados)
+
+str(dados)
+head(dados)
+
+```
+
+Aqui ocorre um passo fundamental da nossa análise:
+
+1.  Conversão da coluna `date` para o formato de data;
+
+2.  Criação da variável `ano`;
+
+3.  Criação da variável categórica `periodo`, que divide os dados em três momentos históricos.
+
+*Nota: Transformamos a variável `periodo` em um fator (factor) para garantir que os gráficos respeitem a ordem cronológica do tempo, e não a ordem alfabética.*no consumo musical.
+
+```{r importacao_dados}
+dados <- dados |>
+  mutate(
+    date = as.Date(date),
+    ano = lubridate::year(date),
+    periodo = case_when(
+      ano < 2020 ~ "Pré-pandemia",
+      ano >= 2020 & ano <= 2021 ~ "Pandemia",
+      ano >= 2022 ~ "Pós-pandemia"
+    ),
+    periodo = factor(periodo, levels = c("Pré-pandemia", "Pandemia", "Pós-pandemia"))
+  )
+
+```
+
+Nesta etapa seguinte, filtramos a base para:
+
+- Selecionar apenas dados do **Brasil**;
+
+- Remover registros com datas inválidas (garantindo a consistência da análise).
+
+```{r}
+dados_br <- dados |>
+  filter(country == "br") |>
+  filter(!is.na(date))
+```
+
+Por fim, preparamos algumas variáveis auxiliares (mês e duração em minutos) que serão utilizadas nos gráficos de sazonalidade e de composição das faixas mais populares, mantidas em uma tabela auxiliar para não alterar a base original `dados_br`.
+
+```{r dados_auxiliares}
+dados_aux <- dados_br |>
+  mutate(
+    mes = lubridate::month(date, label = TRUE, abbr = TRUE),
+    duracao_minutos = round(as.numeric(duration) / 60000, 2),
+    explicit = as.logical(explicit)
+  )
+```
+
+#######################################################################################################################################################
+
+### Interpretação do gráfico 1: Evolução dos Streams ao Longo do Tempo
+
+Este gráfico mostra como os streams evoluem ao longo do tempo. Os pontos representam observações individuais (com transparência para evitar poluição visual), enquanto a linha preta representa a tendência geral (regressão linear). Seguindo os princípios de Cole Nussbaumer Knaflic em *Storytelling com Dados*, o gráfico foi mantido enxuto: sem bordas ou linhas de grade desnecessárias, com a legenda posicionada de forma discreta, para que a atenção do leitor vá direto para a tendência de crescimento.
+
+**Relação observada:** Permite identificar crescimento ou queda no consumo de música, possibilitando observar diferenças entre os períodos e indicando mudanças de comportamento durante a pandemia.
+
+```{r grafico1}
+dados_br |>
+  ggplot(aes(x = date, y = streams, color = periodo)) +
+  geom_point(alpha = 0.1) +
+  geom_smooth(method = "lm", color = "black") +
+  labs(
+    title = "Streams no Spotify (Brasil)",
+    subtitle = "Evolução ao longo do tempo",
+    x = "Data",
+    y = "Número de Streams",
+    color = "Período"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid.minor = element_blank(),
+    legend.position = "bottom"
+  )
+
+```
+
+#######################################################################################################################################################
+
+### Interpretação do gráfico 2: Distribuição de Streams (Escala Logarítmica)
+
+Este gráfico analisa como os streams estão distribuídos. Utilizamos uma escala logarítmica (log10) no eixo X, pois os dados possuem grande variação e assimetria (poucas músicas com muitos streams e muitas músicas com menos streams). Assim como no gráfico anterior, removemos as linhas de grade secundárias e simplificamos a legenda para reduzir a "tinta não relevante" do gráfico, conceito central defendido por Knaflic para não desviar a atenção do leitor.
+
+**Relação observada:** Identifica a concentração de músicas com poucos ou muitos streams, comparando se houve aumento na proporção de "super hits" muito populares ou se a desigualdade na distribuição se manteve.
+
+Identifica concentração de músicas com poucos ou muitos streams; Permite comparar se houve aumento de hits muito populares; Mostra desigualdade na distribuição (cauda longa).
+
+```{r grafico2}
+dados_br |>
+  ggplot(aes(x = streams, fill = periodo)) +
+  geom_density(alpha = 0.5) +
+  scale_x_log10() +
+  labs(
+    title = "Distribuição de Streams (Escala Log)",
+    x = "Streams (log10)",
+    y = "Densidade",
+    fill = "Período"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid.minor = element_blank(),
+    legend.position = "bottom"
+  )
+
+```
+
+#######################################################################################################################################################
+
+### Interpretação do Gráfico 3: Média de Streams Diários
+
+Este gráfico resume os dados através da média aritmética simples, calculando o volume médio de reproduções por período. Para facilitar a leitura imediata do valor exato de cada barra — uma das recomendações de Knaflic para evitar que o leitor precise "adivinhar" o valor a partir do eixo — os rótulos foram adicionados diretamente sobre as barras, permitindo remover as linhas de grade horizontais sem perda de informação.
+
+**Relação observada:** Permite uma comparação direta e quantitativa entre os períodos, evidenciando em qual fase houve um maior volume médio de consumo (possivelmente impulsionado pelo isolamento social ou adesão tecnológica).
+
+```{r grafico3}
+dados_br |>
+  group_by(periodo) |>
+  summarise(media_streams = mean(streams, na.rm = TRUE)) |>
+  ggplot(aes(x = periodo, y = media_streams, fill = periodo)) +
+  geom_col(show.legend = FALSE) +
+  geom_text(
+    aes(label = label_number(scale_cut = cut_short_scale())(media_streams)),
+    vjust = -0.5,
+    fontface = "bold"
+  ) +
+  labs(
+    title = "Média de streams diários no Top 200",
+    x = "Período",
+    y = "Média de Streams"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+
+```
+
+#######################################################################################################################################################
+
+### Interpretação do Gráfico 4: Top Artistas por Período
+
+Este gráfico mostra os artistas mais recorrentes no ranking Top 200, divididos por período histórico. O tamanho do texto e o espaçamento entre os títulos foram ajustados para que nenhuma informação fique cortada, e a cor de cada período é usada apenas como reforço visual da separação entre os grupos, e não como informação adicional (já que os próprios títulos dos painéis já identificam o período).
+
+**Relação observada:** Identifica os artistas dominantes em cada fase e permite observar se houve renovação do mercado musical nacional ou a permanência de nomes já consolidados.
+
+```{r grafico4, fig.width=12, fig.height=8}
+dados_br |>
+  count(artists, periodo) |>
+  group_by(periodo) |>
+  slice_max(n, n = 10, with_ties = FALSE) |>
+  ungroup() |>
+  ggplot(aes(x = reorder_within(artists, n, periodo), y = n, fill = periodo)) +
+  geom_col(show.legend = FALSE) +
+  scale_x_reordered() +
+  coord_flip() +
+  facet_wrap(~periodo, scales = "free_y") +
+  labs(
+    title = "Top 10 artistas com mais aparições no Top 200 (Brasil)",
+    subtitle = "Comparação da quantidade de aparições: Pré, Durante e Pós-Pandemia",
+    x = "Artista",
+    y = "Número de aparições"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", margin = margin(b = 8)),
+    plot.subtitle = element_text(size = 12, color = "gray30", margin = margin(b = 12)),
+    strip.text = element_text(size = 12, face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+
+```
+
+#######################################################################################################################################################
+
+### Interpretação do Gráfico 5: Evolução do Conteúdo Explícito
+
+Este gráfico acompanha, ano a ano, o volume total de streams gerado por músicas com conteúdo explícito em comparação com músicas de conteúdo livre. A cor vermelha (conteúdo explícito) e a cor verde (conteúdo livre) foram escolhidas deliberadamente para criar contraste imediato, seguindo a recomendação de Knaflic de usar a cor de forma intencional, e não apenas decorativa, para guiar o olhar do leitor para a comparação central do gráfico.
+
+**Relação observada:** Permite observar se a participação de músicas explícitas cresceu, diminuiu ou se manteve estável ao longo dos anos, revelando mudanças no perfil de consumo e na produção musical brasileira.
+
+```{r grafico5, fig.width=9, fig.height=5}
+dados_g_explicito <- dados_aux |>
+  group_by(ano, explicit) |>
+  summarise(
+    total_streams = sum(as.numeric(streams), na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  mutate(
+    Tipo_Conteudo = ifelse(
+      explicit,
+      "Conteúdo Explícito (18+)",
+      "Conteúdo Livre"
+    )
+  )
+
+ggplot(dados_g_explicito,
+       aes(x = ano, y = total_streams, fill = Tipo_Conteudo)) +
+  geom_area(
+    alpha = 0.85,
+    position = "stack"
+  ) +
+  scale_y_continuous(
+    labels = label_number(scale_cut = cut_short_scale())
+  ) +
+  scale_fill_manual(values = c(
+    "Conteúdo Explícito (18+)" = "#C0392B",
+    "Conteúdo Livre" = "#27AE60"
+  )) +
+  labs(
+    x = "Ano",
+    y = "Total de Reproduções",
+    fill = "Classificação"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "top",
+    panel.grid.minor = element_blank()
+  )
+```
+
+O gráfico evidencia a evolução do consumo de músicas explícitas e livres ao longo dos anos. Observa-se uma participação crescente das músicas classificadas como explícitas, refletindo mudanças no perfil de consumo dos usuários brasileiros e na produção musical contemporânea.
+
+#######################################################################################################################################################
+
+### Interpretação do Gráfico 6: Sazonalidade dos Streams
+
+Este mapa de calor cruza mês e ano para mostrar em que momentos do calendário o consumo de música é mais intenso no Brasil. Optamos por manter a paleta contínua "inferno", que vai do escuro ao claro de forma perceptualmente uniforme — evitando o uso de cores arco-íris, que dificultam a leitura de intensidade, um dos alertas feitos por Knaflic sobre o uso inadequado de cor em visualizações.
+
+**Relação observada:** Identifica os períodos de maior audiência durante cada ano. Os tons mais claros/quentes indicam maior concentração de reproduções, revelando possíveis padrões sazonais relacionados a férias, festividades e lançamentos de novos sucessos.
+
+```{r grafico6, fig.width=9, fig.height=5}
+dados_g_sazonal <- dados_aux |>
+  group_by(ano, mes) |>
+  summarise(
+    total_streams = sum(as.numeric(streams), na.rm = TRUE),
+    .groups = "drop"
+  )
+
+ggplot(
+  dados_g_sazonal,
+  aes(
+    x = mes,
+    y = factor(ano),
+    fill = total_streams
+  )
+) +
+  geom_tile(color = "white") +
+  scale_fill_viridis_c(
+    option = "inferno",
+    labels = label_number(scale_cut = cut_short_scale())
+  ) +
+  labs(
+    x = "Mês",
+    y = "Ano",
+    fill = "Streams"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "right")
+```
+
+#######################################################################################################################################################
+
+### Interpretação do Gráfico 7: Top 10 Músicas Mais Tocadas
+
+Este gráfico apresenta as dez músicas com maior volume acumulado de reproduções, utilizando um gráfico de "pirulito" (lollipop) em vez de um gráfico de barras tradicional. Essa escolha segue diretamente uma recomendação de Knaflic: o pirulito comunica a mesma informação com muito menos tinta na tela, reduzindo a poluição visual sem perder precisão. O tamanho dos pontos representa a duração média das músicas, enquanto a cor distingue conteúdo explícito de conteúdo livre — reforçando visualmente o achado do Gráfico 5.
+
+**Relação observada:** Permite identificar quais faixas concentram o maior volume de audiência e observar se as músicas mais ouvidas tendem a ser mais longas/curtas e explícitas/livres.
+
+```{r grafico7, fig.width=9, fig.height=6}
+dados_g_top10 <- dados_aux |>
+  group_by(name, artists, explicit) |>
+  summarise(
+    total_streams = sum(as.numeric(streams), na.rm = TRUE),
+    duracao_media = mean(duracao_minutos, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  arrange(desc(total_streams)) |>
+  head(10) |>
+  mutate(Tipo_Conteudo = ifelse(explicit == TRUE, "Explícito", "Livre"))
+
+ggplot(dados_g_top10, aes(x = reorder(name, total_streams), y = total_streams)) +
+  geom_segment(aes(xend = name, yend = 0, color = Tipo_Conteudo), linewidth = 1.2, alpha = 0.5) +
+  geom_point(aes(color = Tipo_Conteudo, size = duracao_media), alpha = 1) +
+  scale_y_continuous(labels = label_number(scale_cut = cut_short_scale())) +
+  scale_color_manual(values = c("Explícito" = "#C0392B", "Livre" = "#27AE60")) +
+  scale_size_continuous(range = c(4, 9)) +
+  coord_flip() +
+  labs(
+    x = "",
+    y = "Total de Reproduções",
+    color = "Conteúdo",
+    size = "Duração (Min)"
+  ) +
+  theme_bw(base_size = 14) +
+  theme(
+    panel.grid.major.y = element_blank(),
+    legend.position = "bottom",
+    legend.box = "vertical",
+    axis.text.y = element_text(face = "bold")
+  )
+```
+
+## Conclusão Final
+
+A partir da exploração dos dados do Spotify no Brasil, divididos entre os cenários Pré-Pandemia, Pandemia e Pós-Pandemia, foi possível extrair importantes interpretações sobre o consumo de música digital:
+
+1.  **Aceleração do Consumo Digital:** A análise de tendência e a média de streams revelam que o consumo de música através da plataforma apresentou um crescimento orgânico ao longo do tempo. A pandemia atuou como um possível catalisador desse engajamento, refletindo uma mudança de hábitos da população brasileira, que passou a consumir mais entretenimento digital em casa.
+
+2.  **Desigualdade no Mercado Musical (Cauda Longa):** A análise de distribuição em escala logarítmica confirmou a forte concentração de reproduções. O mercado de streaming é caracterizado por uma minoria de faixas ("megahits") que acumulam a esmagadora maioria dos plays, enquanto a grande base de músicas disputa fatias muito menores da atenção do público. Esse comportamento estrutural não se alterou drasticamente entre os períodos.
+
+3.  **Renovação e Consistência Artística:** Ao avaliar o Top 10 artistas com mais aparições no Top 200, observa-se a dinâmica cultural brasileira. Alguns gêneros, tradicionalmente fortes como o Sertanejo e o Funk/Trap, mantêm presença constante. Contudo, há uma nítida renovação nos nomes que lideram as paradas quando comparamos o período pré-pandêmico com o pós-pandêmico, indicando um mercado musical altamente dinâmico, onde a retenção de longo prazo no Top 200 é um desafio até para grandes artistas.
+
+4.  **Conteúdo Explícito em Ascensão:** A evolução do conteúdo explícito mostra uma participação crescente desse tipo de música no total de streams, indicando uma mudança tanto na produção musical brasileira quanto nas preferências do público ao longo dos anos.
+
+5.  **Sazonalidade do Consumo:** O mapa de calor revela que o volume de streams não é uniforme ao longo do calendário, havendo meses de pico que provavelmente coincidem com férias, festas de fim de ano e grandes lançamentos musicais.
+
+6.  **Perfil das Faixas Mais Populares:** O ranking das dez músicas mais ouvidas mostra a relação entre duração, classificação de conteúdo e volume de reproduções, complementando a leitura da desigualdade de mercado com exemplos concretos dos maiores sucessos.
+
+**Síntese:** O projeto demonstrou com êxito como a linguagem R (via ecossistema Tidyverse) é capaz de transformar dados brutos de plataformas de streaming em insights de negócio. Compreender esses padrões temporais não apenas ilumina as escolhas de consumo da sociedade, mas também oferece diretrizes cruciais para estratégias de marketing e lançamentos na indústria fonográfica atual. Além disso, a aplicação dos princípios de *Storytelling com Dados* (Cole Nussbaumer Knaflic) — eliminação de elementos visuais desnecessários, uso intencional da cor e escolha de gráficos que comuniquem a mensagem com o mínimo de esforço de leitura — tornou os resultados mais claros e diretamente acionáveis.
