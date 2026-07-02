@@ -24,7 +24,7 @@ jobs:
 
       - name: Render Rmd
         run: |
-          Rscript -e 'rmarkdown::render("Trabalho_Pratico_dashboard.Rmd", output_format = "flexdashboard::flex_dashboard")'
+          Rscript -e 'rmarkdown::render("trabalho_analise_de_dados_spotify.Rmd", output_format = "flexdashboard::flex_dashboard")'
 
       - name: Commit and Push HTML
         run: |
