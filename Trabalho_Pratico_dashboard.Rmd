@@ -1,0 +1,290 @@
+---
+title: "Trabalho Pratico dashboard"
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: scroll
+    theme: lumen
+date: "2026-06-11"
+---
+
+```{r setup, include=FALSE}
+# ==============================================================================
+# CARREGAMENTO DE PACOTES
+# A função library() "liga" as ferramentas que vamos usar.
+# O opts_chunk silencia avisos e mensagens para o painel final ficar limpo.
+# ==============================================================================
+library(flexdashboard)
+library(dplyr)
+library(lubridate) 
+library(data.table)
+library(ggplot2)
+library(scales)
+library(tidytext)
+
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+```{r processamento}
+# ==============================================================================
+# BLOCO 1: IMPORTAÇÃO E TRATAMENTO DOS DADOS
+# ==============================================================================
+# Lendo o arquivo original CSV
+dados_historicos <- fread("charts.csv")
+
+# Tratamento dos dados (Pipeline)
+linha_do_tempo_detalhada <- dados_historicos %>%
+  filter(country == "br") %>% # Filtra apenas músicas do Brasil
+  mutate(
+    # Conversão de tipos de dados e criação de novas variáveis
+    data_semana = ymd(date),
+    ano = year(data_semana),
+    mes = lubridate::month(data_semana, label = TRUE, abbr = TRUE), 
+    duracao_minutos = round(as.numeric(duration) / 60000, 2),
+    explicit = as.logical(explicit),
+    # Categorização do período histórico com base no ano
+    periodo = case_when(
+      ano < 2020 ~ "Pré-pandemia",
+      ano >= 2020 & ano <= 2021 ~ "Pandemia",
+      ano >= 2022 ~ "Pós-pandemia"
+    ),
+    # Transformação em 'factor' para garantir a ordem cronológica nos gráficos
+    periodo = factor(periodo, levels = c("Pré-pandemia", "Pandemia", "Pós-pandemia"))
+  ) %>%
+  select(
+    # Selecionando apenas as colunas que serão úteis para a análise
+    data = data_semana, ano, mes, periodo,
+    posicao = position,
+    musica = name,
+    artista = artists,
+    reproducoes = streams,
+    duracao_minutos,
+    explicit,
+    generos = artist_genres
+  )
+```
+
+# Início
+
+Row
+--------------------------------------
+
+### Apresentação
+
+Este dashboard é o **resumo executivo** do trabalho completo de análise dos dados do Spotify no Brasil. Ele reúne os gráficos mais representativos do relatório — selecionados por sua capacidade de comunicar, com o mínimo de esforço de leitura, os principais achados da análise (princípio central de *Storytelling com Dados*, de Cole Nussbaumer Knaflic).
+
+Os indicadores foram construídos para avaliar:
+
+- Evolução do conteúdo explícito;
+- Sazonalidade das reproduções;
+- Características das músicas mais populares;
+- Impacto da pandemia na permanência dos artistas no ranking.
+
+---
+
+# Evolução do Conteúdo Explícito
+
+Row {data-height=600}
+-------------------------------------
+
+### Gráfico
+
+```{r grafico_evolucao, fig.height=5, fig.width=12}
+# GRÁFICO 1: Evolução temporal do tipo de conteúdo
+dados_g1 <- linha_do_tempo_detalhada %>%
+  group_by(ano, explicit) %>%
+  summarise(
+    total_streams = sum(as.numeric(reproducoes), na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    Tipo_Conteudo = ifelse(
+      explicit,
+      "Conteúdo Explícito (18+)",
+      "Conteúdo Livre"
+    )
+  )
+
+# Construção do gráfico de área
+ggplot(dados_g1, aes(x = ano, y = total_streams, fill = Tipo_Conteudo)) +
+  geom_area(alpha = 0.85, position = "stack") +
+  scale_y_continuous(labels = label_number(scale_cut = cut_short_scale())) +
+  scale_fill_manual(values = c(
+    "Conteúdo Explícito (18+)" = "#C0392B",
+    "Conteúdo Livre" = "#27AE60"
+  )) +
+  labs(
+    title = "Conteúdo explícito ganha espaço ano após ano",
+    x = "Ano",
+    y = "Total de Reproduções",
+    fill = "Classificação"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "top",
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(face = "bold", size = 16, margin = margin(b = 15))
+  )
+```
+
+Row {data-height=200}
+-------------------------------------
+
+### Relatório
+
+O gráfico evidencia a evolução do consumo de músicas explícitas e livres ao longo dos anos.
+
+Observa-se uma participação crescente das músicas classificadas como explícitas, refletindo mudanças no perfil de consumo dos usuários brasileiros e na produção musical contemporânea. As cores vermelho e verde foram usadas de forma intencional para que o olhar do leitor vá direto à comparação entre os dois tipos de conteúdo.
+
+---
+
+# Sazonalidade dos Streams
+
+Row {data-height=600}
+-------------------------------------
+
+### Gráfico
+
+```{r grafico_sazonalidade, fig.height=5, fig.width=12}
+# GRÁFICO 2: MAPA DE CALOR SAZONAL
+dados_g2 <- linha_do_tempo_detalhada %>%
+  group_by(ano, mes) %>%
+  summarise(
+    total_streams = sum(as.numeric(reproducoes), na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Construção do mapa de calor usando geom_tile
+ggplot(dados_g2, aes(x = mes, y = factor(ano), fill = total_streams)) +
+  geom_tile(color = "white", linewidth = 0.5) +
+  scale_fill_viridis_c(
+    option = "inferno",
+    labels = label_number(scale_cut = cut_short_scale())
+  ) +
+  labs(
+    title = "Existem meses de pico consistentes no consumo",
+    x = "Mês",
+    y = "Ano",
+    fill = "Streams"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "right",
+    panel.grid = element_blank(),
+    plot.title = element_text(face = "bold", size = 16, margin = margin(b = 15))
+  )
+```
+
+Row {data-height=200}
+-------------------------------------
+
+### Relatório
+
+O mapa de calor permite visualizar os períodos de maior audiência durante cada ano.
+
+Os tons mais claros/quentes indicam maior concentração de reproduções, revelando possíveis padrões sazonais relacionados a férias, festividades e lançamentos de novos sucessos. A paleta contínua "inferno" foi escolhida por ser perceptualmente uniforme, evitando o efeito enganoso de paletas arco-íris.
+
+---
+
+# Top 10 Músicas Mais Tocadas
+
+Row {data-height=650}
+-------------------------------------
+
+### Gráfico
+
+```{r grafico_top10, fig.height=6, fig.width=12}
+# GRÁFICO 3: RAIO-X DO TOP 10 (PIRULITO)
+dados_g3 <- linha_do_tempo_detalhada %>%
+  group_by(musica, artista, explicit) %>%
+  summarise(
+    total_streams = sum(as.numeric(reproducoes), na.rm = TRUE),
+    duracao_media = mean(duracao_minutos, na.rm = TRUE), 
+    .groups = 'drop'
+  ) %>%
+  arrange(desc(total_streams)) %>%
+  head(10) %>%
+  mutate(Tipo_Conteudo = ifelse(explicit == TRUE, "Explícito", "Livre"))
+
+# Construção do gráfico de pirulito (segment + point)
+ggplot(dados_g3, aes(x = reorder(musica, total_streams), y = total_streams)) +
+  geom_segment(aes(xend = musica, yend = 0, color = Tipo_Conteudo), linewidth = 1.2, alpha = 0.5) + 
+  geom_point(aes(color = Tipo_Conteudo, size = duracao_media), alpha = 1) +   
+  scale_y_continuous(labels = label_number(scale_cut = cut_short_scale())) +
+  scale_color_manual(values = c("Explícito" = "#C0392B", "Livre" = "#27AE60")) +
+  scale_size_continuous(range = c(4, 9)) + 
+  coord_flip() + 
+  labs(
+    title = "As dez faixas que mais acumularam reproduções",
+    x = "", 
+    y = "Total de Reproduções",
+    color = "Conteúdo", 
+    size = "Duração (Min)"
+  ) +
+  theme_bw(base_size = 14) +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    legend.position = "bottom",
+    legend.box = "vertical",
+    axis.text.y = element_text(face = "bold"),
+    plot.title = element_text(face = "bold", size = 16, margin = margin(b = 15))
+  )
+```
+
+Row {data-height=200}
+-------------------------------------
+
+### Relatório
+
+O gráfico apresenta as dez músicas com maior volume acumulado de reproduções, utilizando um gráfico de pirulito (lollipop) em vez de barras tradicionais para reduzir a quantidade de tinta na tela.
+
+O tamanho dos pontos representa a duração média das músicas, enquanto as cores distinguem conteúdos explícitos e livres.
+
+---
+
+# Impacto da Pandemia
+
+Row {data-height=700}
+-------------------------------------
+
+### Grafico
+
+```{r grafico_pandemia, fig.width=14, fig.height=7}
+# GRÁFICO 4: IMPACTO DA PANDEMIA COM FACET_WRAP
+linha_do_tempo_detalhada |>
+  count(artista, periodo) |>
+  group_by(periodo) |>
+  slice_max(n, n = 10, with_ties = FALSE) |>
+  ungroup() |>
+  ggplot(aes(x = reorder_within(artista, n, periodo), y = n, fill = periodo)) +
+  geom_col(show.legend = FALSE) +
+  scale_x_reordered() +
+  coord_flip() +
+  # O ncol = 3 garante que os gráficos fiquem lado a lado horizontalmente
+  facet_wrap(~periodo, scales = "free_y", ncol = 3) +
+  labs(
+    title = "Top 10 Artistas Mais Recorrentes no Top 200",
+    subtitle = "Comparação da quantidade de aparições: Pré, Durante e Pós-Pandemia",
+    x = "Artista",
+    y = "Número de Aparições no Ranking"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(size = 18, face = "bold", margin = margin(b = 5)),
+    plot.subtitle = element_text(size = 14, color = "gray30", margin = margin(b = 15)),
+    strip.text = element_text(size = 14, face = "bold"),
+    axis.text.y = element_text(size = 11),
+    axis.text.x = element_text(size = 11),
+    panel.grid.minor = element_blank()
+  )
+```
+
+Row {data-height=200}
+-------------------------------------
+
+### Relatório
+
+Este gráfico foi selecionado para o resumo por sintetizar a dominância de artistas em três fases históricas — o coração da pergunta de pesquisa deste trabalho.
+
+A formatação foi ajustada para que os números no eixo inferior e os nomes dos artistas fiquem organizados e não se sobreponham, enquanto o título foi dimensionado para não ser cortado na tela. Podemos observar quais artistas se mantiveram no topo e quais são as novas tendências do mercado pós-pandemia.
